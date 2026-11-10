@@ -11,6 +11,12 @@ export const HEARTBEAT_MS = 15_000
 export const STALE_MS = 45_000
 /** A snapshot whose registry entry has been gone this long is deleted by the hub. */
 export const ORPHAN_MS = 60 * 60 * 1000
+/**
+ * A session's pending ask counts as "needs you" only after it has been pending this long. An ask is put to the
+ * decider, which in auto mode is the classifier, not you: it holds a call for a moment and clears it, as it
+ * does at the start of nearly every session. A call that really waits on you is still pending after this.
+ */
+export const ASK_GRACE_MS = 8_000
 
 /** The fields of Claude Code's own `sessions/<pid>.json` the hub reads. */
 export type RegistryEntry = {
@@ -188,6 +194,24 @@ export function mergeRows(i: MergeInput): HubRow[] {
     })
   }
   return rows.sort((a, b) => ORDER[a.state] - ORDER[b.state] || b.activeAt - a.activeAt || a.name.localeCompare(b.name))
+}
+
+/**
+ * Holds back sessions whose ask is younger than `ASK_GRACE_MS`: they show as busy, not as needing you.
+ * `seen` maps a session id to when its ask was first seen and is kept by the caller between polls; this
+ * writes to it. A session whose ask is gone has its entry dropped, so the next ask starts its own clock.
+ */
+export function applyAskGrace(rows: HubRow[], seen: Map<string, number>, now: number): HubRow[] {
+  const asking = new Set<string>()
+  const out = rows.map(r => {
+    if (!r.snap || r.snap.pending <= 0) return r
+    asking.add(r.sessionId)
+    const since = seen.get(r.sessionId) ?? now
+    seen.set(r.sessionId, since)
+    return r.state === 'needs-you' && now - since < ASK_GRACE_MS ? { ...r, state: 'busy' as const } : r
+  })
+  for (const id of [...seen.keys()]) if (!asking.has(id)) seen.delete(id)
+  return out
 }
 
 /** Snapshot file names (`<id>.json`) with no live session behind them, and old enough to delete. */

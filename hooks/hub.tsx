@@ -28,6 +28,7 @@ import type { Config } from './core'
 import {
   alivePids,
   ago,
+  applyAskGrace,
   buildSnapshot,
   configDirOf,
   HEARTBEAT_MS,
@@ -67,6 +68,8 @@ let lastKey = ''
 let lastWrite = 0
 let lastId = ''
 let isLocked = false
+// When each session's pending ask was first seen: see `applyAskGrace`.
+const askSeen = new Map<string, number>()
 
 async function configDir($: EngineInterface) {
   const [configDir, home] = await Promise.all([$.env.get('CLAUDE_CONFIG_DIR').catch(() => undefined), $.env.get('HOME').catch(() => undefined)])
@@ -188,7 +191,7 @@ async function poll($: EngineInterface) {
   const pids = registry.map(r => r.pid).filter(p => p > 0)
   const ps = pids.length > 0 ? await $.process.run(['ps', '-p', pids.join(','), '-o', 'pid=']).catch(() => null) : null
   const selfId = await $.session.id().catch(() => null)
-  const rows = mergeRows({
+  const merged = mergeRows({
     registry,
     snapshots: new Map(snaps.map(s => [s.sessionId, s])),
     alive: alivePids(ps?.stdout ?? ''),
@@ -196,6 +199,8 @@ async function poll($: EngineInterface) {
     selfId,
     isSelfShown: false,
   })
+  // An ask the classifier clears in a moment is not you: it counts once it has waited a few seconds.
+  const rows = applyAskGrace(merged, askSeen, now)
   await update($, hub, x => ({ ...normalize(DEFAULT_HUB, x), rows, at: now, error, selfId }))
   // Files of sessions that ended without cleaning up (a crash, a kill).
   const files = await $.fs.list(snapDir).catch(() => [])
