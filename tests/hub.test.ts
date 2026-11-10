@@ -2,11 +2,13 @@ import { expect, test } from 'claude-code/testing'
 
 import { DEFAULT_GATE, DEFAULT_MAIN, DEFAULT_USAGE, normalizeCard, recordCheck } from '../hooks/core'
 import {
+  ASK_GRACE_MS,
   HEARTBEAT_MS,
   ORPHAN_MS,
   STALE_MS,
   ago,
   alivePids,
+  applyAskGrace,
   buildSnapshot,
   configDirOf,
   snapshotsDir,
@@ -125,6 +127,31 @@ test('sessions that need you come first, then busy, then idle, latest activity f
   )
   expect(rows.map(r => r.sessionId)).toEqual(['asks', 'busy', 'nodeck-busy', 'idle-new', 'idle-old'])
   expect(rows.map(r => r.state)).toEqual(['needs-you', 'busy', 'busy', 'idle', 'idle'])
+})
+
+test('an ask counts as needing you only after it has waited a few seconds', () => {
+  const seen = new Map<string, number>()
+  const rowsAt = (now: number, pending: number) =>
+    applyAskGrace(merge([reg({ sessionId: 'asks', name: 'd' })], [snap({ sessionId: 'asks', pending })]), seen, now)
+  // First seen: the classifier may clear it in a moment, so the session reads as busy.
+  expect(rowsAt(NOW, 1)[0]?.state).toBe('busy')
+  expect(rowsAt(NOW + ASK_GRACE_MS - 1, 1)[0]?.state).toBe('busy')
+  expect(rowsAt(NOW + ASK_GRACE_MS, 1)[0]?.state).toBe('needs-you')
+  // Answered: the clock is dropped, so the next ask starts its own.
+  expect(rowsAt(NOW + ASK_GRACE_MS + 2000, 0)[0]?.state).toBe('idle')
+  expect(seen.size).toBe(0)
+  expect(rowsAt(NOW + 60_000, 1)[0]?.state).toBe('busy')
+})
+
+test('the ask clock follows each session and forgets one that ends', () => {
+  const seen = new Map<string, number>()
+  const two = [reg({ pid: 1, sessionId: 'a', name: 'a' }), reg({ pid: 2, sessionId: 'b', name: 'b' })]
+  applyAskGrace(merge(two, [snap({ sessionId: 'a', pending: 1 }), snap({ sessionId: 'b' })]), seen, NOW)
+  const later = applyAskGrace(merge(two, [snap({ sessionId: 'a', pending: 1 }), snap({ sessionId: 'b', pending: 1 })]), seen, NOW + ASK_GRACE_MS)
+  expect(later.find(r => r.sessionId === 'a')?.state).toBe('needs-you')
+  expect(later.find(r => r.sessionId === 'b')?.state).toBe('busy')
+  applyAskGrace([], seen, NOW + 10_000)
+  expect(seen.size).toBe(0)
 })
 
 test('a running agent makes its session busy even when the main loop waits', () => {

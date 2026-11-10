@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
 - `/flightdeck all` turns an instance into a dashboard of every live Claude Code session on the machine: one row each with its model, context, cost, running agents and any permission check waiting, sessions that need you first, and a row expands into that session's agents and recent log lines. Run it in a spare Claude Code window; every session's own pane is unchanged. Sessions running Flightdeck publish a small snapshot of themselves to `~/.claude/flightdeck/sessions/`; names, folders and idle/busy come from Claude Code's session registry, so sessions without Flightdeck still show. This is the first time Flightdeck writes files and runs processes; the README's "What it can reach" lists exactly what.
+- In `/flightdeck all`, a session waiting on you stands out: an amber banner at the top counts them, and the row's `⚠` and name are bold amber. A session sitting at the prompt gets a dim `›`; a busy one keeps `●`.
+- A pending permission check counts as needing you only after it has waited 8 seconds. A check is put to the decider, which in auto mode is the classifier rather than you, and the classifier holds a call for a moment and clears it, as it does at the start of nearly every session. Without the wait, a new session read as needing you for a second or two. A check that is really waiting on you is still pending after 8 seconds and shows as before.
 
 ## 0.6.1
 
