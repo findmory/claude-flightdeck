@@ -76,7 +76,8 @@ Connectors animate only while work flows: a turn is running, an agent is running
 | Command | Does |
 | --- | --- |
 | `/flightdeck` | open the pane |
-| `/flightdeck close` | close it |
+| `/flightdeck all` | open the [all-sessions dashboard](#all-your-sessions-at-once) instead, in this instance |
+| `/flightdeck close` | close it (either pane) |
 | `/flightdeck reset` | clear agents, checks, consults, log and the turn (cost, rate limits and compactions stay) |
 | `/flightdeck layout auto\|compact\|wide\|mini` | override the layout for this session |
 
@@ -88,6 +89,24 @@ Focus the pane with `ctrl+x tab`, then:
 | `f` `s` `o` | open the gate's file / shell / other drill-down: the last 5 checks and their verdicts |
 
 `/clear` resets the pane along with the conversation.
+
+## All your sessions at once
+
+Run `/flightdeck all` in any Claude Code instance and its pane becomes a dashboard of every live session on the machine: one row each, sessions that need you first (a permission check waiting), then busy, then idle.
+
+```
+ALL SESSIONS  7 sessions · 1 need you · 2 busy · 2 agents · $104
+⚠ 1: bosspoker-v4-65     Opus 5.5    ▰▰▰▱▱ 62%  $4.21  ⚠ 1 ask  3m
+● 2: fondo-e6            Sonnet 5.5  ▰▰▰▰▰ 91%  $99.99          3m
+○ 3: claude-flightdeck   no deck     —                           8m
+```
+
+Open a spare Claude Code window for it and leave it beside your work; each session's own pane is unchanged. Focus the pane with `ctrl+x tab`, then `1`-`9` expand a row into that session's agents, its recent log lines and its folder. `/flightdeck` returns this instance to its own pane.
+
+- **Names, folders and idle/busy** come from Claude Code's own session registry (`<config dir>/sessions/`), so every live session shows, even one without Flightdeck (marked `no deck`).
+- **Model, context, cost, agents and waiting checks** come from the sessions that run Flightdeck: each writes a small snapshot of itself, about 2 KB, to `~/.claude/flightdeck/sessions/<session id>.json` whenever something changes, and removes it when it ends. A snapshot holds counts, names and the last few log lines with credentials masked; no prompts and no file contents. The folder is readable by you alone.
+- A snapshot whose session stopped publishing for 45 seconds is dimmed. One left behind by a crash is deleted by the dashboard an hour after its session is gone.
+- The dashboard leaves its own instance out of the list.
 
 ## Where it runs
 
@@ -111,7 +130,7 @@ Flightdeck only watches. Every hook passes its event on unchanged: it never deni
 | the context breakdown `/context` shows (its categories, memory-file paths, MCP tools, agents and skills), estimated locally once per model; it keeps only the compaction window from it | `$.session.usage({ breakdown: 'summary' })` |
 | advisor tool calls in the assistant's responses (their content is encrypted) | `session.append` |
 
-What it keeps: short summaries (a tool name plus a path or command, with credentials masked) in session state, which ends with the session. It makes **no** network requests, runs no processes, reads and writes no files, stores nothing across sessions, and calls no model. `claude plugin validate .` prints exactly what it hooks and calls.
+What it keeps: short summaries (a tool name plus a path or command, with credentials masked) in session state, which ends with the session. It makes **no** network requests and calls no model. For the [all-sessions dashboard](#all-your-sessions-at-once) it writes one small snapshot file per session under `~/.claude/flightdeck/sessions/` and deletes it when the session ends; `/flightdeck all` also reads the session registry and those snapshots, and runs `ps -p` on the sessions' pids to tell live from ended, and `rm -f` and `chmod 700` on its own snapshot folder. It stores nothing else across sessions. `claude plugin validate .` prints exactly what it hooks and calls.
 
 ## What is inferred, not measured
 

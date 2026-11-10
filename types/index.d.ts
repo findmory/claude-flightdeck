@@ -116,6 +116,49 @@ export type View = { expanded: string | null; gateOpen: Bucket | null; layout: L
 
 export type Roster = { architectTypes: string[] }
 
+export type SnapAgent = { title: string; status: string; ctx: number; steps: number; spawnedAt: number; endedAt: number | null }
+export type SnapLine = { at: number; who: string; text: string; isError: boolean }
+
+/** What each session publishes for the all-sessions view: counts, names and one-line activity, never prompts. */
+export type Snapshot = {
+  v: number
+  sessionId: string
+  /** When it was written, ms since the epoch. */
+  at: number
+  model: string
+  isRunning: boolean
+  ctxPct: number | null
+  costUsd: number | null
+  agentsRunning: number
+  agentsTotal: number
+  /** Permission checks waiting on a decision. */
+  pending: number
+  denied: number
+  agents: SnapAgent[]
+  log: SnapLine[]
+}
+
+export type RowState = 'needs-you' | 'busy' | 'idle'
+
+export type HubRow = {
+  sessionId: string
+  name: string
+  cwd: string
+  pid: number
+  state: RowState
+  /** False for a session whose Flightdeck has published nothing: only the registry's facts show. */
+  hasDeck: boolean
+  isStale: boolean
+  snap: Snapshot | null
+  /** Latest sign of life, ms since the epoch: the snapshot's write or the registry's update. */
+  activeAt: number
+}
+
+/** The all-sessions view: the rows the last poll found, and when. */
+/** `isOpen`: the pane was opened, so a reload polls again. */
+export type HubState = { rows: HubRow[]; at: number; error: string | null; selfId: string | null; isOpen: boolean }
+export type HubView = { expanded: string | null }
+
 declare module 'claude-code' {
   interface PluginState {
     'flightdeck': {
@@ -131,6 +174,8 @@ declare module 'claude-code' {
       receipt: Receipt | null
       view: View
       roster: Roster
+      hub: HubState
+      hubView: HubView
     }
   }
 }

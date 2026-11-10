@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `/flightdeck all` turns an instance into a dashboard of every live Claude Code session on the machine: one row each with its model, context, cost, running agents and any permission check waiting, sessions that need you first, and a row expands into that session's agents and recent log lines. Run it in a spare Claude Code window; every session's own pane is unchanged. Sessions running Flightdeck publish a small snapshot of themselves to `~/.claude/flightdeck/sessions/`; names, folders and idle/busy come from Claude Code's session registry, so sessions without Flightdeck still show. This is the first time Flightdeck writes files and runs processes; the README's "What it can reach" lists exactly what.
+
 ## 0.6.1
 
 - On Claude Code before 2.1.299 the pane no longer empties, session log and all, once the first prompt is sent. Since 0.5.1 the connectors between panels asked for `Text`'s monospaced face (`mono`), which Claude Code has only from 2.1.299, and the first connector is drawn when a turn starts. Flightdeck now asks for that face only where `$.session.version()` reports 2.1.299 or later. Older versions draw the connectors in the default face, so on a graphical surface a running connector's right end may jitter again, as before 0.5.1. ([#29](https://github.com/scasella/claude-flightdeck/pull/29); [#28](https://github.com/scasella/claude-flightdeck/issues/28), thanks @Bexxs75 for tracing it to 0.5.1)

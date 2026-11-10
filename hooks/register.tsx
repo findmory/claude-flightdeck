@@ -75,6 +75,7 @@ import {
   stepLoop,
 } from './core'
 import type { Config, Panel } from './core'
+import { closeHub, isHubOpen, openHub, registerHub, startHub, stopPublisher } from './hub'
 
 const PANE = 'flightdeck'
 const TITLE = 'Flightdeck'
@@ -251,12 +252,14 @@ export const register: Register = (on, options) => {
   const C = PALETTES[cfg.palette]
   // tool.check carries no loop id; the tool.call around it does, keyed by the call's id.
   const callLoop = new Map<string, string | null>()
+  // Publishes this session's snapshot for `/flightdeck all` anywhere, and draws that view.
+  registerHub(on, cfg)
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'flightdeck',
       description: 'Flightdeck, the live agent dashboard: open, close, reset, or set the layout',
-      argumentHint: '[open|close|reset|layout auto|compact|wide|mini]',
+      argumentHint: '[open|all|close|reset|layout auto|compact|wide|mini]',
     })
     await migrate($)
     // A host without usage (headless, an SDK host, a session not yet bound) just starts without it.
@@ -277,9 +280,12 @@ export const register: Register = (on, options) => {
         limits: u.rateLimits.map(limitOf),
       }))
     }
-    if (cfg.openOnStart) void openPane($, cfg).catch(() => undefined)
+    // A session that is the all-sessions dashboard (the hub was opened, then a reload) goes back to that, not to its own pane.
+    if (await isHubOpen($)) void openHub($).catch(() => undefined)
+    else if (cfg.openOnStart) void openPane($, cfg).catch(() => undefined)
     await refreshStatus($, cfg)
     const done = await next(e)
+    await startHub($)
     if (resumedWindow > 0) {
       await readCompactWindow($, resumedWindow)
       await refreshStatus($, cfg)
@@ -288,6 +294,7 @@ export const register: Register = (on, options) => {
   })
 
   on('session.end', async ($, e, next) => {
+    await stopPublisher($, e.reason)
     if (e.reason === 'clear') {
       await resetAll($)
       await refreshStatus($, cfg)
@@ -301,7 +308,14 @@ export const register: Register = (on, options) => {
     const [verb = 'open', arg = ''] = e.args.trim().split(/\s+/)
     if (verb === 'close') {
       await $.ui.close({ id: PANE })
+      await closeHub($)
       return { text: 'Flightdeck closed.' }
+    }
+    if (verb === 'all') {
+      // This session becomes the dashboard: its own pane would take the dock's one slot. `/flightdeck` brings it back.
+      await $.ui.close({ id: PANE })
+      const opened = await openHub($)
+      return { text: opened.isPlaced ? 'Flightdeck: all sessions. 1-9 expand a row. Run this in a spare Claude Code window to keep it apart from your work.' : `The all-sessions view is not shown yet: ${opened.reason}` }
     }
     if (verb === 'reset') {
       await resetAll($)
@@ -315,6 +329,7 @@ export const register: Register = (on, options) => {
       const opened = await openPane($, cfg)
       return { text: opened.isPlaced ? `Flightdeck layout: ${layout}.` : `Layout set to ${layout}; the pane is not shown yet: ${opened.reason}` }
     }
+    await closeHub($)
     const opened = await openPane($, cfg)
     if (!opened.isPlaced) return { text: `Flightdeck is not shown yet: ${opened.reason}` }
     return { text: 'Flightdeck opened. Focus it with ctrl+x tab; 1-6 expand cards, f/s/o open the gate rows.' }
